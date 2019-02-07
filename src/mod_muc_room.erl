@@ -296,7 +296,7 @@ normal_state({route, <<"">>,
                  ?NS_VCARD ->
                    process_iq_vcard(From, IQ, StateData);
                  ?NS_MUCSUB ->
-                   process_iq_mucsub(From, IQ, StateData,From);
+                   process_iq_mucsub(From, IQ, StateData, From);
                  ?NS_CAPTCHA ->
                    process_iq_captcha(From, IQ, StateData);
                  _ ->
@@ -559,7 +559,7 @@ handle_sync_event({muc_subscribe, From, Nick, Nodes}, _From,
   TmpConfig = Config#config{captcha_protected = false,
     password_protected = false},
   TmpState = StateData#state{config = TmpConfig},
-  case process_iq_mucsub(From, IQ, TmpState,From) of
+  case process_iq_mucsub(From, IQ, TmpState, From) of
     {result, #muc_subscribe{events = NewNodes}, NewState} ->
       NewConfig = (NewState#state.config)#config{
         captcha_protected = CaptchaRequired,
@@ -578,7 +578,7 @@ handle_sync_event({muc_subscribe, From, Nick, Nodes}, _From,
 handle_sync_event({muc_unsubscribe, From}, _From, StateName, StateData) ->
   IQ = #iq{type = set, id = p1_rand:get_string(),
     from = From, sub_els = [#muc_unsubscribe{}]},
-  case process_iq_mucsub(From, IQ, StateData,From) of
+  case process_iq_mucsub(From, IQ, StateData, From) of
     {result, _, NewState} ->
       {reply, ok, StateName, NewState};
     {ignore, NewState} ->
@@ -649,7 +649,7 @@ handle_info({captcha_succeed, From}, normal_state,
                {Nick, Packet} ->
                  Robots = maps:put(From, passed, StateData#state.robots),
                  add_new_user(From, Nick, Packet,
-                   StateData#state{robots = Robots},From);
+                   StateData#state{robots = Robots}, From);
                passed ->
                  StateData
              end,
@@ -1028,7 +1028,7 @@ do_process_presence(Nick, #presence{from = From, type = available, lang = Lang} 
     StateData) ->
   case is_user_online(From, StateData) of
     false ->
-      add_new_user(From, Nick, Packet, StateData,From);
+      add_new_user(From, Nick, Packet, StateData, From);
     true ->
       case is_nick_change(From, Nick, StateData) of
         true ->
@@ -1682,7 +1682,7 @@ update_online_user(JID, #user{nick = Nick} = User, StateData) ->
   end,
   NewStateData.
 
-set_subscriber(JID, Nick, Nodes, StateData,FromByJD) ->
+set_subscriber(JID, Nick, Nodes, StateData, FromByJD) ->
   BareJID = jid:remove_resource(JID),
   LBareJID = jid:tolower(BareJID),
   Subscribers = maps:put(LBareJID,
@@ -1696,7 +1696,7 @@ set_subscriber(JID, Nick, Nodes, StateData,FromByJD) ->
   store_room(NewStateData, [{add_subscription, BareJID, Nick, Nodes}]),
   case not maps:is_key(LBareJID, StateData#state.subscribers) of
     true ->
-      send_subscriptions_change_notifications(BareJID, Nick, subscribe, NewStateData,FromByJD);
+      send_subscriptions_change_notifications(BareJID, Nick, subscribe, NewStateData, FromByJD);
     _ ->
       ok
   end,
@@ -1845,11 +1845,11 @@ nick_collision(User, Nick, StateData) ->
     jid:remove_resource(jid:tolower(UserOfNick))
       /= jid:remove_resource(jid:tolower(User))).
 
--spec add_new_user(jid(), binary(), presence(), state(),jid()) -> state();
-    (jid(), binary(), iq(), state(),jid()) -> {error, stanza_error()} |
+-spec add_new_user(jid(), binary(), presence(), state(), jid()) -> state();
+    (jid(), binary(), iq(), state(), jid()) -> {error, stanza_error()} |
 {ignore, state()} |
 {result, muc_subscribe(), state()}.
-add_new_user(From, Nick, Packet, StateData,FromByJD) ->
+add_new_user(From, Nick, Packet, StateData, FromByJD) ->
   Lang = xmpp:get_lang(Packet),
   MaxUsers = get_max_users(StateData),
   MaxAdminUsers = MaxUsers +
@@ -1949,7 +1949,7 @@ add_new_user(From, Nick, Packet, StateData,FromByJD) ->
                 From, Nick, Packet, NewState, StateData),
               NewState;
               true ->
-                set_subscriber(From, Nick, Nodes, StateData,FromByJD)
+                set_subscriber(From, Nick, Nodes, StateData, FromByJD)
             end,
           ResultState =
             case NewStateData#state.just_created of
@@ -3957,25 +3957,25 @@ process_iq_vcard(From, #iq{type = set, lang = Lang, sub_els = [Pkt]},
       {error, xmpp:err_forbidden(ErrText, Lang)}
   end.
 
--spec process_iq_mucsub(jid(), iq(), state(),jid()) ->
+-spec process_iq_mucsub(jid(), iq(), state(), jid()) ->
   {error, stanza_error()} |
   {result, undefined | muc_subscribe() | muc_subscriptions(), state()} |
   {ignore, state()}.
 process_iq_mucsub(_From, #iq{type = set, lang = Lang,
   sub_els = [#muc_subscribe{}]},
-    #state{just_created = false, config = #config{allow_subscription = false}},_Form) ->
+    #state{just_created = false, config = #config{allow_subscription = false}}, _Form) ->
   {error, xmpp:err_not_allowed(<<"Subscriptions are not allowed">>, Lang)};
 process_iq_mucsub(From,
     #iq{type = set, lang = Lang,
       sub_els = [#muc_subscribe{jid = #jid{} = SubJid} = Mucsub]},
-    StateData,FormByJD) ->
+    StateData, FormByJD) ->
   FAffiliation = get_affiliation(From, StateData),
   FRole = get_role(From, StateData),
   if FRole == moderator; FAffiliation == owner; FAffiliation == admin ->
     process_iq_mucsub(SubJid,
       #iq{type = set, lang = Lang,
         sub_els = [Mucsub#muc_subscribe{jid = undefined}]},
-      StateData,From);
+      StateData, From);
     true ->
       Txt = <<"Moderator privileges required">>,
       {error, xmpp:err_forbidden(Txt, Lang)}
@@ -3983,7 +3983,7 @@ process_iq_mucsub(From,
 process_iq_mucsub(From,
     #iq{type = set, lang = Lang,
       sub_els = [#muc_subscribe{nick = Nick}]} = Packet,
-    StateData,FromByJD) ->
+    StateData, FromByJD) ->
   LBareJID = jid:tolower(jid:remove_resource(From)),
   try maps:get(LBareJID, StateData#state.subscribers) of
     #subscriber{nick = Nick1} when Nick1 /= Nick ->
@@ -4004,28 +4004,28 @@ process_iq_mucsub(From,
       end;
     #subscriber{} ->
       Nodes = get_subscription_nodes(Packet),
-      NewStateData = set_subscriber(From, Nick, Nodes, StateData,FromByJD),
+      NewStateData = set_subscriber(From, Nick, Nodes, StateData, FromByJD),
       {result, subscribe_result(Packet), NewStateData}
   catch _:{badkey, _} ->
     SD2 = StateData#state{config = (StateData#state.config)#config{allow_subscription = true}},
-    add_new_user(From, Nick, Packet, SD2,FromByJD)
+    add_new_user(From, Nick, Packet, SD2, FromByJD)
   end;
 process_iq_mucsub(From, #iq{type = set, lang = Lang,
   sub_els = [#muc_unsubscribe{jid = #jid{} = UnsubJid}]},
-    StateData,FromByJD) ->
+    StateData, FromByJD) ->
   FAffiliation = get_affiliation(From, StateData),
   FRole = get_role(From, StateData),
   if FRole == moderator; FAffiliation == owner; FAffiliation == admin ->
     process_iq_mucsub(UnsubJid,
       #iq{type = set, lang = Lang,
         sub_els = [#muc_unsubscribe{jid = undefined}]},
-      StateData,FromByJD);
+      StateData, FromByJD);
     true ->
       Txt = <<"Moderator privileges required">>,
       {error, xmpp:err_forbidden(Txt, Lang)}
   end;
 process_iq_mucsub(From, #iq{type = set, sub_els = [#muc_unsubscribe{}]},
-    StateData,FromByJD) ->
+    StateData, FromByJD) ->
   LBareJID = jid:tolower(jid:remove_resource(From)),
   try maps:get(LBareJID, StateData#state.subscribers) of
     #subscriber{nick = Nick} ->
@@ -4034,7 +4034,7 @@ process_iq_mucsub(From, #iq{type = set, sub_els = [#muc_unsubscribe{}]},
       NewStateData = StateData#state{subscribers = Subscribers,
         subscriber_nicks = Nicks},
       store_room(NewStateData, [{del_subscription, LBareJID}]),
-      send_subscriptions_change_notifications(LBareJID, Nick, unsubscribe, StateData,FromByJD),
+      send_subscriptions_change_notifications(LBareJID, Nick, unsubscribe, StateData, FromByJD),
       NewStateData2 = case close_room_if_temporary_and_empty(NewStateData) of
                         {stop, normal, _} -> stop;
                         {next_state, normal_state, SD} -> SD
@@ -4045,7 +4045,7 @@ process_iq_mucsub(From, #iq{type = set, sub_els = [#muc_unsubscribe{}]},
   end;
 process_iq_mucsub(From, #iq{type = get, lang = Lang,
   sub_els = [#muc_subscriptions{}]},
-    StateData,FromByJD) ->
+    StateData, FromByJD) ->
   FAffiliation = get_affiliation(From, StateData),
   FRole = get_role(From, StateData),
   if FRole == moderator; FAffiliation == owner; FAffiliation == admin ->
@@ -4058,7 +4058,7 @@ process_iq_mucsub(From, #iq{type = get, lang = Lang,
       Txt = <<"Moderator privileges required">>,
       {error, xmpp:err_forbidden(Txt, Lang)}
   end;
-process_iq_mucsub(_From, #iq{type = get, lang = Lang}, _StateData,FromByJD) ->
+process_iq_mucsub(_From, #iq{type = get, lang = Lang}, _StateData, FromByJD) ->
   Txt = <<"Value 'get' of 'type' attribute is not allowed">>,
   {error, xmpp:err_bad_request(Txt, Lang)}.
 
@@ -4317,8 +4317,8 @@ store_room(StateData, ChangesHints) ->
       ok
   end.
 
--spec send_subscriptions_change_notifications(jid(), binary(), subscribe|unsubscribe, state(),jid()) -> ok.
-send_subscriptions_change_notifications(From, Nick, Type, State,FromByJD) ->
+-spec send_subscriptions_change_notifications(jid(), binary(), subscribe|unsubscribe, state(), jid()) -> ok.
+send_subscriptions_change_notifications(From, Nick, Type, State, FromByJD) ->
   maps:fold(fun(_, #subscriber{nodes = Nodes, jid = JID}, _) ->
     case lists:member(?NS_MUCSUB_NODES_SUBSCRIBERS, Nodes) of
       true ->
@@ -4338,13 +4338,15 @@ send_subscriptions_change_notifications(From, Nick, Type, State,FromByJD) ->
                     {unsubscribe, _} ->
                       #muc_unsubscribe{nick = Nick}
                   end,
+        ElementId = p1_rand:get_string(),
         Packet = #message{
+          id = ElementId,
           sub_els = [#hint{type = 'store'},
             #ps_event{
               items = #ps_items{
                 node = ?NS_MUCSUB_NODES_SUBSCRIBERS,
                 items = [#ps_item{
-                  id = p1_rand:get_string(),
+                  id = ElementId,
                   sub_els = [Payload],
                   publisher = jid:encode(jid:remove_resource(FromByJD))}]}}]},
         ejabberd_router:route(xmpp:set_from_to(Packet, State#state.jid, JID));
