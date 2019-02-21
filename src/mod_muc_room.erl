@@ -4347,9 +4347,8 @@ send_subscriptions_change_notifications(From, Nick, Type, State, FromByJD) ->
                 node = ?NS_MUCSUB_NODES_SUBSCRIBERS,
                 items = [#ps_item{
                   id = ElementId,
-                  sub_els = [Payload],
-                  publisher = jid:encode(jid:remove_resource(FromByJD))}]}}]},
-        ejabberd_router:route(xmpp:set_from_to(Packet, State#state.jid, JID));
+                  sub_els = [Payload]}]}}]},
+        ejabberd_router:route(xmpp:set_from_to(Packet, jid:replace_resource(State#state.jid, FromByJD#jid.luser), JID));
       false ->
         ok
     end
