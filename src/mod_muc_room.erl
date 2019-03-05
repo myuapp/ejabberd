@@ -1682,6 +1682,22 @@ update_online_user(JID, #user{nick = Nick} = User, StateData) ->
   end,
   NewStateData.
 
+subscriber_push(From, To,#state{jid = RoomJID} = MUCState)->
+  ToUser = binary_to_list(To#jid.luser),
+  FromUser = binary_to_list(From#jid.luser),
+  GroupId = binary_to_list(RoomJID#jid.luser),
+  TypeChat = "addsubscriber",
+  DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\"}",
+  Method = post,
+  URL = "http://qa-api.myu.co/midl/api/v3/pushnotification/chat?debug=true",
+  Header = [],
+  Type = "application/json",
+  HTTPOptions = [],
+  Options = [],
+  inets:start(),
+  ssl:start(),
+  httpc:request(Method, {URL, Header, Type, DataBody}, HTTPOptions, Options).
+
 set_subscriber(JID, Nick, Nodes, StateData, FromByJD) ->
   BareJID = jid:remove_resource(JID),
   LBareJID = jid:tolower(BareJID),
@@ -1696,6 +1712,7 @@ set_subscriber(JID, Nick, Nodes, StateData, FromByJD) ->
   store_room(NewStateData, [{add_subscription, BareJID, Nick, Nodes}]),
   case not maps:is_key(LBareJID, StateData#state.subscribers) of
     true ->
+      subscriber_push(FromByJD,BareJID,StateData),
       send_subscriptions_change_notifications(BareJID, Nick, subscribe, NewStateData, FromByJD);
     _ ->
       ok
