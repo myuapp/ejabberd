@@ -10,7 +10,7 @@
 -author("dev@codepond.org").
 
 
--export([start/2, stop/1, store_packet/1, is_subscriber/2, get_users_and_subscribers/1, is_user_online/2,group_chat_push/6, muc_filter_message/3]).
+-export([start/2, stop/1, store_packet/1, is_subscriber/2, get_users_and_subscribers/1, is_user_online/2, group_chat_push/6, muc_filter_message/3]).
 
 -include("ejabberd.hrl").
 -include("xmpp.hrl").
@@ -29,12 +29,17 @@ stop(_Host) ->
 
 
 
-store_packet({_Action, #message{from = From, to = To} = Packet}) ->
-  case Packet#message.body /= [] of
+store_packet({_, #message{from = From, to = To} = Packet} = Acc) ->
+  Type = Packet#message.type,
+  [{text, _, Body}] = Packet#message.body,
+  if
+    (Type == chat) and (Body /= <<"">>) ->
+      post_offline_message(From, To, Body, Packet#message.id),
+      Packet;
     true ->
-      [{text, _, Body}] = Packet#message.body,
-      post_offline_message(From, To, Body, Packet#message.id)
-  end.
+      Packet
+  end,
+  Acc.
 
 is_subscriber(JID, StateData) ->
   LJID = jid:tolower(jid:remove_resource(JID)),
@@ -70,7 +75,7 @@ get_users_and_subscribers(StateData) ->
       end
     end, StateData#state.users, StateData#state.subscribers).
 
-group_chat_push(From, To, Packet, GroupId, State,Body) ->
+group_chat_push(From, To, Packet, GroupId, State, Body) ->
   LTo = jid:tolower(To),
   IsOffline = case maps:get(LTo, State#state.users, error) of
                 #user{last_presence = undefined} -> true;
@@ -78,23 +83,23 @@ group_chat_push(From, To, Packet, GroupId, State,Body) ->
                 _ -> false
               end,
   if IsOffline ->
-      ToUser = binary_to_list(To#jid.luser),
-      FromUser = binary_to_list(From#jid.luser),
-      FinalBody = binary_to_list(Body),
-      TypeChat = "groupchat",
-      MessageId = binary_to_list(Packet#message.id),
-      PostUrl = gen_mod:get_module_opt(To#jid.lserver, ?MODULE, post_url, fun(S) ->
+    ToUser = binary_to_list(To#jid.luser),
+    FromUser = binary_to_list(From#jid.luser),
+    FinalBody = binary_to_list(Body),
+    TypeChat = "groupchat",
+    MessageId = binary_to_list(Packet#message.id),
+    PostUrl = gen_mod:get_module_opt(To#jid.lserver, ?MODULE, post_url, fun(S) ->
       iolist_to_binary(S) end, list_to_binary("")),
-      DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\"}",
-      Method = post,
-      URL = binary_to_list(PostUrl),
-      Header = [],
-      Type = "application/json",
-      HTTPOptions = [],
-      Options = [],
-      inets:start(),
-      ssl:start(),
-      httpc:request(Method, {URL, Header, Type, DataBody}, HTTPOptions, Options);
+    DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\"}",
+    Method = post,
+    URL = binary_to_list(PostUrl),
+    Header = [],
+    Type = "application/json",
+    HTTPOptions = [],
+    Options = [],
+    inets:start(),
+    ssl:start(),
+    httpc:request(Method, {URL, Header, Type, DataBody}, HTTPOptions, Options);
     true ->
       false
   end.
@@ -108,9 +113,9 @@ muc_filter_message(#message{from = From} = Packet,
       _LIST_SUBSCRIBER = get_users_and_subscribers(MUCState),
       GroupId = binary_to_list(RoomJID#jid.luser),
       maps:fold(
-    fun(_, #user{jid = To}, _) ->
-      group_chat_push(From, To, Packet, GroupId, MUCState,Body)
-    end, ok, _LIST_SUBSCRIBER),
+        fun(_, #user{jid = To}, _) ->
+          group_chat_push(From, To, Packet, GroupId, MUCState, Body)
+        end, ok, _LIST_SUBSCRIBER),
       Packet;
     true ->
       Packet
