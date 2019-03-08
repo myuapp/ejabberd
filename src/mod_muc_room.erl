@@ -1682,7 +1682,7 @@ update_online_user(JID, #user{nick = Nick} = User, StateData) ->
   end,
   NewStateData.
 
-subscriber_push(From, To,#state{jid = RoomJID} = MUCState)->
+subscriber_push(From, To, #state{jid = RoomJID} = MUCState) ->
   ToUser = binary_to_list(To#jid.luser),
   FromUser = binary_to_list(From#jid.luser),
   GroupId = binary_to_list(RoomJID#jid.luser),
@@ -1712,7 +1712,7 @@ set_subscriber(JID, Nick, Nodes, StateData, FromByJD) ->
   store_room(NewStateData, [{add_subscription, BareJID, Nick, Nodes}]),
   case not maps:is_key(LBareJID, StateData#state.subscribers) of
     true ->
-      subscriber_push(FromByJD,BareJID,StateData),
+      subscriber_push(FromByJD, BareJID, StateData),
       send_subscriptions_change_notifications(BareJID, Nick, subscribe, NewStateData, FromByJD);
     _ ->
       ok
@@ -3790,15 +3790,11 @@ destroy_room(DEl, StateData) ->
   maps:fold(
     fun(_LJID, Info, _) ->
       Nick = Info#user.nick,
-      Item = #muc_item{affiliation = none,
-        role = none},
-      Packet = #presence{
-        type = unavailable,
-        sub_els = [#muc_user{items = [Item],
-          destroy = Destroy}]},
-      send_wrapped(jid:replace_resource(StateData#state.jid, Nick),
-        Info#user.jid, Packet,
-        ?NS_MUCSUB_NODES_CONFIG, StateData)
+      ElementId = p1_rand:get_string(),
+      Packet = #message{
+        id = ElementId,
+        sub_els = [#hint{type = 'store'}, Destroy]},
+      ejabberd_router:route(xmpp:set_from_to(Packet, jid:replace_resource(StateData#state.jid, Nick), Info#user.jid))
     end, ok, get_users_and_subscribers(StateData)),
   case (StateData#state.config)#config.persistent of
     true ->
