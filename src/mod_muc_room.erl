@@ -3794,7 +3794,7 @@ destroy_room(DEl, StateData) ->
       Packet = #message{
         id = ElementId,
         sub_els = [#hint{type = 'store'}, Destroy]},
-      ejabberd_router:route(xmpp:set_from_to(Packet, jid:replace_resource(StateData#state.jid, Nick), Info#user.jid))
+      ejabberd_router:route(xmpp:set_from_to(Packet, jid, Info#user.jid))
     end, ok, get_users_and_subscribers(StateData)),
   case (StateData#state.config)#config.persistent of
     true ->
