@@ -44,7 +44,8 @@
 %% gen_fsm callbacks
 -export([init/1,
   normal_state/2,
-  handle_event/3,
+  handle_event/4,
+  destroy_room/3,
   handle_sync_event/4,
   handle_info/3,
   terminate/3,
@@ -479,7 +480,7 @@ normal_state(_Event, StateData) ->
   {next_state, normal_state, StateData}.
 
 handle_event({service_message, Msg}, _StateName,
-    StateData) ->
+    StateData,FromByJD) ->
   MessagePkt = #message{type = groupchat, body = xmpp:mk_text(Msg)},
   send_wrapped_multiple(
     StateData#state.jid,
@@ -491,23 +492,23 @@ handle_event({service_message, Msg}, _StateName,
     StateData#state.jid, MessagePkt, StateData),
   {next_state, normal_state, NSD};
 handle_event({destroy, Reason}, _StateName,
-    StateData) ->
+    StateData,FromByJD) ->
   {result, undefined, stop} =
     destroy_room(#muc_destroy{xmlns = ?NS_MUC_OWNER, reason = Reason},
-      StateData),
+      StateData,FromByJD),
   ?INFO_MSG("Destroyed MUC room ~s with reason: ~p",
     [jid:encode(StateData#state.jid), Reason]),
   add_to_log(room_existence, destroyed, StateData),
   {stop, shutdown, StateData};
-handle_event(destroy, StateName, StateData) ->
+handle_event(destroy, StateName, StateData,FromByJD) ->
   ?INFO_MSG("Destroyed MUC room ~s",
     [jid:encode(StateData#state.jid)]),
-  handle_event({destroy, <<"">>}, StateName, StateData);
+  handle_event({destroy, <<"">>}, StateName, StateData,FromByJD);
 handle_event({set_affiliations, Affiliations},
-    StateName, StateData) ->
+    StateName, StateData,FromByJD) ->
   NewStateData = set_affiliations(Affiliations, StateData),
   {next_state, StateName, NewStateData};
-handle_event(_Event, StateName, StateData) ->
+handle_event(_Event, StateName, StateData,FromByJD) ->
   {next_state, StateName, StateData}.
 
 handle_sync_event({get_disco_item, Filter, JID, Lang}, _From, StateName, StateData) ->
@@ -3176,7 +3177,7 @@ process_iq_owner(From, #iq{type = set, lang = Lang,
       ?INFO_MSG("Destroyed MUC room ~s by the owner ~s",
         [jid:encode(StateData#state.jid), jid:encode(From)]),
       add_to_log(room_existence, destroyed, StateData),
-      destroy_room(Destroy, StateData);
+      destroy_room(Destroy, StateData,From);
     Config /= undefined, Destroy == undefined, Items == [] ->
       case Config of
         #xdata{type = cancel} ->
@@ -3784,8 +3785,8 @@ expand_opts(CompactOpts) ->
 config_fields() ->
   [subject, subject_author, subscribers | record_info(fields, config)].
 
--spec destroy_room(muc_destroy(), state()) -> {result, undefined, stop}.
-destroy_room(DEl, StateData) ->
+%%-spec destroy_room(muc_destroy(), state(),From) -> {result, undefined, stop}.
+destroy_room(DEl, StateData,FromByJD) ->
   Destroy = DEl#muc_destroy{xmlns = ?NS_MUC_USER},
   maps:fold(
     fun(_LJID, Info, _) ->
@@ -3794,7 +3795,7 @@ destroy_room(DEl, StateData) ->
       Packet = #message{
         id = ElementId,
         sub_els = [#hint{type = 'store'}, Destroy]},
-      ejabberd_router:route(xmpp:set_from_to(Packet, jid:replace_resource(StateData#state.jid, Nick), Info#user.jid))
+      ejabberd_router:route(xmpp:set_from_to(Packet, jid:replace_resource(StateData#state.jid, FromByJD#jid.luser), Info#user.jid))
     end, ok, get_users_and_subscribers(StateData)),
   case (StateData#state.config)#config.persistent of
     true ->
