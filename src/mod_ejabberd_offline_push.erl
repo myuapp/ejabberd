@@ -34,7 +34,7 @@ store_packet({_, #message{from = From, to = To} = Packet} = Acc) ->
   [{text, _, Body}] = Packet#message.body,
   if
     (Type == chat) and (Body /= <<"">>) ->
-      post_offline_message(From, To, Body, Packet#message.id),
+      post_offline_message(From, To, Body, Packet#message.id, Packet),
       Packet;
     true ->
       Packet
@@ -88,9 +88,11 @@ group_chat_push(From, To, Packet, GroupId, State, Body) ->
     FinalBody = binary_to_list(Body),
     TypeChat = "groupchat",
     MessageId = binary_to_list(Packet#message.id),
+    [{text, _, Subject}] = Packet#message.subject,
+    FinalSubject = binary_to_list(Subject),
     PostUrl = gen_mod:get_module_opt(To#jid.lserver, ?MODULE, post_url, fun(S) ->
       iolist_to_binary(S) end, list_to_binary("")),
-    DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\"}",
+    DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\",\"subject\":\"" ++ FinalSubject ++ "\"}",
     Method = post,
     URL = binary_to_list(PostUrl),
     Header = [],
@@ -121,15 +123,17 @@ muc_filter_message(#message{from = From} = Packet,
       Packet
   end.
 
-post_offline_message(From, To, Body, MsgId) ->
+post_offline_message(From, To, Body, MsgId, Packet) ->
   ToUser = binary_to_list(To#jid.luser),
   FromUser = binary_to_list(From#jid.luser),
   FinalBody = binary_to_list(Body),
   MessageId = binary_to_list(MsgId),
+  [{text, _, Subject}] = Packet#message.subject,
+  FinalSubject = binary_to_list(Subject),
   TypeChat = "chat",
   PostUrl = gen_mod:get_module_opt(To#jid.lserver, ?MODULE, post_url, fun(S) ->
     iolist_to_binary(S) end, list_to_binary("")),
-  DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\"}",
+  DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"body\":\"" ++ FinalBody ++ "\",\"messageID\":\"" ++ MessageId ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"subject\":\"" ++ FinalSubject ++ "\"}",
   Method = post,
   URL = binary_to_list(PostUrl),
   Header = [],
