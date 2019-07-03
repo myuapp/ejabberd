@@ -1690,7 +1690,7 @@ subscriber_push(From, To, #state{jid = RoomJID} = MUCState) ->
   TypeChat = "addsubscriber",
   DataBody = "{\"toJID\":\"" ++ ToUser ++ "\",\"fromJID\":\"" ++ FromUser ++ "\",\"type\":\"" ++ TypeChat ++ "\",\"groupId\":\"" ++ GroupId ++ "\"}",
   Method = post,
-  URL = "https://api.myu.co/midl/api/v3/pushnotification/chat",
+  URL = "https://qa-api.myu.co/midl/api/v3/pushnotification/chat",
   Header = [],
   Type = "application/json",
   HTTPOptions = [],
